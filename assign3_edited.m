@@ -7,6 +7,7 @@
 
 clear all;
 close all;
+load ch_coeff.mat
 
 n = 10^5;
 code_len = 32;
@@ -16,7 +17,9 @@ snr_db = -10:2:14;
 
 tx_data_bp = rand(1,n);
 tx_data_bpsk = 2 * (tx_data_bp > 0.5) - 1;
-tx_data_qpsk = reshape(tx_data_bpsk,2,n/2);
+tx_data_qpr = rand(1,n/2);
+tx_data_qpi = rand(1,n/2);
+tx_data_qpsk = (2*(tx_data_qpr>0.5)-1) + j*(2*(tx_data_qpi>0.5)-1);
 
 eb_n0_lin = 10.^(eb_n0_db/10);
 snr_lin = 10.^(snr_db/10);
@@ -47,17 +50,17 @@ for i = 1:length(eb_n0_db)
   % Adding noise, appropriately
   fprintf('Epoch %d \n', i);
   noise_bpsk = randn(1, n)/(sqrt(2*eb_n0_lin(i)));
-  noise_qpsk = randn(2, n/2)/sqrt(2*(2*eb_n0_lin(i)));
+  noise_qpsk = (randn(1, n/2)+j*rand(1, n/2))/sqrt(2*(2*eb_n0_lin(i)));
   
   % Added for spreading
   noise_bpsk_spread = randn(1,code_len*n)/(sqrt(2*eb_n0_lin(i)));
   
   %#############
-  noise_qpsk_spread = randn(2,code_len*(n/2))/(sqrt(2*2*eb_n0_lin(i)));
+  noise_qpsk_spread = (randn(1,code_len*n/2) + j*randn(1,code_len*n/2))/(sqrt(2*2*eb_n0_lin(i)));
   %#############
   
   noise_bpsk2 = randn(1,n)/sqrt(2*snr_lin(i));
-  noise_qpsk2 = randn(2,n/2)/sqrt(2*2*0.5*snr_lin(i));
+  noise_qpsk2 = (randn(1,n/2)+j*randn(1,n/2))/sqrt(2*2*0.5*snr_lin(i));
 
   % Added for spreading
   noise_bpsk_spread2 = randn(1, code_len*n)/sqrt(2*snr_lin(i)/code_len);
@@ -65,16 +68,12 @@ for i = 1:length(eb_n0_db)
   rx_bpsk = tx_data_bpsk + noise_bpsk;
   rx_bpsk2 = tx_data_bpsk + noise_bpsk2;
 
-  %###############
-  rx_qpsk = tx_data_qpsk + noise_qpsk;
-  %###############
-  
   % Added for spreading
   rx_bpsk_spread = spread_data_bpsk + noise_bpsk_spread;
   rx_bpsk_spread2 = spread_data_bpsk + noise_bpsk_spread2;
 
   %###############
-  rx_qpsk_spread = spread_data_qpsk + noise_qpsk_spread;
+  rx_qpsk_spread = spread_data_qpsk/sqrt(2) + noise_qpsk_spread;
   %###############
   
   % Normalization for QPSK input data
@@ -83,7 +82,9 @@ for i = 1:length(eb_n0_db)
 
   rx_bpsk = 2 * (rx_bpsk > 0) - 1;
   rx_bpsk2 = 2 * (rx_bpsk2 > 0) - 1;
-  rx_qpsk = 2 * (rx_qpsk > 0) - 1;
+  rx_qpsk_i = 2 * (real(rx_qpsk) > 0) - 1;
+  rx_qpsk_q = 2 * (imag(rx_qpsk) > 0) - 1;
+  rx_qpsk = rx_qpsk_i + j*rx_qpsk_q;
   rx_qpsk2 = 2 * (rx_qpsk2 > 0) - 1;
   %rx_bpsk_spread = 2 * (rx_bpsk_spread>0) - 1;
   %rx_bpsk_spread2 = 2 * (rx_bpsk_spread2>0) - 1;
@@ -107,8 +108,8 @@ for i = 1:length(eb_n0_db)
   %######################################
   %qpsk
   %splitting rx_qpsk_spread into i and q channel
-  rx_qpsk_spread_i = rx_qpsk_spread([1],:);
-  rx_qpsk_spread_q = rx_qpsk_spread([2],:);
+  rx_qpsk_spread_i = real(rx_qpsk_spread);
+  rx_qpsk_spread_q = imag(rx_qpsk_spread);
   
   %channel i despreading
   temp_sig1 = rx_qpsk_spread_i';
@@ -127,7 +128,7 @@ for i = 1:length(eb_n0_db)
   decoded_sig1_qpsk_q = 2 * (despread_sig_qpsk_q>0) - 1;
   
   %merging decoded_sig1_i&q into 1 matrix
-  decoded_sig1_qpsk = [decoded_sig1_qpsk_i ; decoded_sig1_qpsk_q];
+  decoded_sig1_qpsk = decoded_sig1_qpsk_i + j*decoded_sig1_qpsk_q;
   
   %###########################################
   
@@ -137,11 +138,11 @@ for i = 1:length(eb_n0_db)
   bpsk_spread1(i) = sum(decoded_sig1 ~= tx_data_bpsk)/n;
   bpsk_spread2(i) = sum(decoded_sig2 ~= tx_data_bpsk)/n;
   
-  qpsk1(i) = 0.5*(sum(sum(rx_qpsk ~= tx_data_qpsk)>0)*2/n);
-  qpsk2(i) = 0.5*(sum(sum(rx_qpsk2 ~= tx_data_qpsk)>0)*2/n);
+  qpsk1(i) = 0.5*(sum(rx_qpsk ~= tx_data_qpsk)*2/n);
+  qpsk2(i) = 0.5*(sum(rx_qpsk2 ~= tx_data_qpsk)*2/n);
   
   %############
-  qpsk_spread1(i) = 0.5*sum(sum(decoded_sig1_qpsk ~= tx_data_qpsk)>0)*2/n;
+  qpsk_spread1(i) = 0.5*sum(decoded_sig1_qpsk ~= tx_data_qpsk)*2/n;
   %############
 end
 
@@ -155,16 +156,17 @@ xlabel('Eb/No, dB');
 ylabel('Bit Error Rate');
 title('Bit error vs Eb/No for BPSK and QPSK');
 
+qpsk1
 bpsk_spread1
 bpsk_spread2
 qpsk_spread1
 % For spread spectrum, we use only Ec : chip energy or we use SNR.
-%figure;
-%semilogy(snr_db,bpsk2,'b.-', snr_db,qpsk2, 'mx-', eb_n0_db,bpsk_spread2, 'gx-');
-%grid on;
-%legend('BPSK', 'QPSK', 'BPSKspread');
-%axis([-3 14 1e-6 1]);
+figure;
+semilogy(snr_db,bpsk2,'b.-', snr_db,qpsk2, 'mx-', eb_n0_db,bpsk_spread2, 'gx-', snr_db, qpsk_spread1, 'rx-');
+grid on;
+legend('BPSK', 'QPSK', 'BPSKspread', 'QPSKSpread');
+axis([-3 14 1e-6 1]);
 
-%xlabel('SNR, dB');
-%ylabel('Bit Error Rate');
-%title('Bit error vs SNR for BPSK and QPSK');
+xlabel('SNR, dB');
+ylabel('Bit Error Rate');
+title('Bit error vs SNR for BPSK and QPSK');

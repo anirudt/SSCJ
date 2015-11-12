@@ -1,0 +1,6 @@
+1. Apply given MMSE.m to the original BPSK without spreading, and see if you get close to the original figure, applying the channel as well.
+   The Equalizer is taking care of the Synchronization part as well
+2. We are assuming we have already estimated the channel variables
+  rec_data : ch_coeff * data_from_t
+  imp_res : ch_coeff
+  sigma_seq : variance of the noise sequence

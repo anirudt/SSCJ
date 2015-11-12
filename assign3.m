@@ -1,7 +1,3 @@
-% Do all code also bipolar and debug
-% Sampling frequency: 1.776 GHz, 11th peak * Ts = delay
-% = 6.19 ns, so, we delay by 11 samples 
-
 clear all;
 close all;
 load ch_coeff.mat;
@@ -40,45 +36,43 @@ spread_data_qpsk = kron(tx_data_qpsk, code');
 for i = 1:length(eb_n0_db)
   clear decoded_sig1
   clear decoded_sig2
-  % Adding noise, appropriately
+  % Adding noise
   fprintf('Epoch %d \n', i);
   noise_bpsk = randn(1, n)/(sqrt(2*eb_n0_lin(i)));
-  noise_qpsk = (randn(1, n/2)+j*randn(1, n/2))/sqrt(2*(2*eb_n0_lin(i)));
-  % Added for spreading
-  noise_bpsk_spread = randn(1,code_len*n)/(sqrt(2*eb_n0_lin(i)/code_len));
-
   noise_bpsk2 = randn(1,n)/sqrt(2*snr_lin(i));
+  noise_qpsk = (randn(1, n/2)+j*randn(1, n/2))/sqrt(2*(2*eb_n0_lin(i)));
   noise_qpsk2 = (randn(1,n/2)+j*randn(1,n/2))/sqrt(2*2*0.5*snr_lin(i));
 
-  % Added for spreading
-  % This is the best one for now.
+  % Added noise for spreading
+  noise_bpsk_spread = randn(1,code_len*n)/(sqrt(2*eb_n0_lin(i)/code_len));
   noise_bpsk_spread2 = randn(1, code_len*n)/sqrt(2*snr_lin(i));
   noise_qpsk_spread = (randn(1,code_len*n/2) + j*randn(1,code_len*n/2))/(sqrt(2*2*eb_n0_lin(i))/code_len);
   noise_qpsk_spread2 = (randn(1,n/2*code_len)+j*randn(1,n/2*code_len))/sqrt(2*2*0.5*snr_lin(i));
   sigma = var(noise_qpsk_spread2);
 
+  % Transmitted Data stream, unspread, power normalized for QPSK
   rx_bpsk = tx_data_bpsk + noise_bpsk;
   rx_bpsk2 = tx_data_bpsk + noise_bpsk2;
+  rx_qpsk = tx_data_qpsk/sqrt(2) + noise_qpsk;
+  rx_qpsk2 = tx_data_qpsk/sqrt(2) + noise_qpsk2;
 
-  % Added for spreading
+  % Transmitted Data stream, spread
   rx_bpsk_spread = spread_data_bpsk + noise_bpsk_spread;
   rx_bpsk_spread2 = spread_data_bpsk + noise_bpsk_spread2;
   rx_qpsk_spread = spread_data_qpsk/sqrt(2) + noise_qpsk_spread2;
 
-  % Applying the channel and equalization followed by synchronization
+  % Applying the channel and equalization followed by synchronization, for QPSK
   rx_qpsk_spread = filter(ch_coeff, 1, rx_qpsk_spread);
   [rx_qpsk_spread, a] = MMSE_eq(rx_qpsk_spread, ch_coeff, sigma);
 
-  % Normalization for QPSK input data
-  rx_qpsk = tx_data_qpsk/sqrt(2) + noise_qpsk;
-  %[rx_bpsk, a] = MMSE_eq(rx_bpsk, ch_coeff, sigma);
-
-  rx_qpsk2 = tx_data_qpsk/sqrt(2) + noise_qpsk2;
+  % Triggered to see effect of channel and equalization on simple unspread QPSK [Optional]
   %rx_qpsk2 = filter(ch_coeff, 1, rx_qpsk2);
   %[rx_qpsk2, a] = MMSE_eq(rx_qpsk2, ch_coeff, sigma);
 
   rx_bpsk = 2 * (rx_bpsk > 0) - 1;
   rx_bpsk2 = 2 * (rx_bpsk2 > 0) - 1;
+
+  % Dealing with I, Q components
   rx_qpsk_i = 2 * (real(rx_qpsk) > 0) - 1;
   rx_qpsk_q = 2 * (imag(rx_qpsk) > 0) - 1;
   rx_qpsk = rx_qpsk_i + j*rx_qpsk_q;
@@ -86,6 +80,7 @@ for i = 1:length(eb_n0_db)
   rx_qpsk2_q = 2 * (imag(rx_qpsk2) > 0) - 1;
   rx_qpsk2 = rx_qpsk2_i + j*rx_qpsk2_q;
 
+  % BPSK Spreading, 1
   temp_sig1 = rx_bpsk_spread';
   temp_sig2 = reshape(temp_sig1, code_len, n);
   temp_sig3 = kron(ones(n,1), code');
@@ -93,7 +88,7 @@ for i = 1:length(eb_n0_db)
   despread_sig = (sum(temp_sig4'))/code_len;
   decoded_sig1 = 2 * (despread_sig>0) - 1;
 
-  % Shifting the signal
+  % BPSK Spreading, 2
   temp_sig1 = rx_bpsk_spread2';
   temp_sig2 = reshape(temp_sig1, code_len, n);
   temp_sig4 = temp_sig2'.*temp_sig3;
@@ -122,9 +117,7 @@ for i = 1:length(eb_n0_db)
   %merging decoded_sig1_i&q into 1 matrix
   decoded_sig1_qpsk = decoded_sig1_qpsk_i + j*decoded_sig1_qpsk_q;
 
-  %rx_bpsk = real(filter(ch_coeff,1,rx_bpsk));
-  %[rx_bpsk, a] = MMSE_eq(rx_bpsk, ch_coeff, sigma);
-
+  % Decision Time!
   bpsk1(i) = sum(rx_bpsk ~= tx_data_bpsk)/n;
   bpsk2(i) = sum(rx_bpsk2 ~= tx_data_bpsk)/n;
   bpsk_spread1(i) = sum(decoded_sig1 ~= tx_data_bpsk)/n;
